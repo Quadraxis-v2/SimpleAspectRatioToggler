@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "name": "Wii",
+            "includePath": [
+                "${DEVKITPRO_HOME}/libogc/include/**",
+                "${DEVKITPRO_HOME}/devkitPPC/lib/gcc/powerpc-eabi/13.1.0/include/**",
+                "${DEVKITPRO_HOME}/devkitPPC/powerpc-eabi/include/**",
+                "${DEVKITPRO_HOME}/portlibs/ppc/include",
+                "${DEVKITPRO_HOME}/libogc/include/ogc",
+                "${DEVKITPRO_HOME}/portlibs/wii/include"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE",
+                "HW_RVL",
+                "__wii__"
+            ],
+            "cStandard": "c23",
+            "cppStandard": "c++23",
+            "intelliSenseMode": "${default}",
+            "compilerArgs": [],
+            "compilerPath": "${DEVKITPRO_HOME}/devkitPPC/bin/powerpc-eabi-g++.exe"
+        }
+    ],
+    "version": 4
+}
