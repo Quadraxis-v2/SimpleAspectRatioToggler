@@ -19,6 +19,7 @@ int main(int argc, char **argv)
 	// This function initialises the attached controllers
 	WPAD_Init();
 
+	CONF_Init();
 	ISFS_Initialize();
 
 	// Obtain the preferred video mode from the system
@@ -51,27 +52,10 @@ int main(int argc, char **argv)
 	std::printf("\x1b[2;0H");
 
 	int32_t iFileDescriptor = -1;
-	uint8_t* puyValue = static_cast<uint8_t*>(std::aligned_alloc(32, 1));
+	int32_t iAspectRatio = CONF_GetAspectRatio();
 
-	try
-	{
-		if ((iFileDescriptor = ISFS_Open("/shared2/sys/SYSCONF", ISFS_OPEN_READ)) < 0)
-			throw std::ios_base::failure("Error opening SYSCONF");
-	
-		if (ISFS_Seek(iFileDescriptor, 0x4DF, 0) < 0)
-			throw std::ios_base::failure("Error seeking SYSCONF");
-
-		if (ISFS_Read(iFileDescriptor, puyValue, 1) < 0)
-			throw std::ios_base::failure("Error reading SYSCONF");
-	}
-	catch(const std::ios_base::failure& CiosBaseFailure)
-	{
-		std::printf("%s\n", CiosBaseFailure.what());
-	}
-	
-	if (iFileDescriptor >= 0) ISFS_Close(iFileDescriptor);
-	iFileDescriptor = -1;
-	std::printf("Press A to toggle aspect ratio. Current value: %s\n", *puyValue ? "16:9" : "4:3");
+	std::printf("Press A to toggle aspect ratio. Current value: %s\n", 
+		(iAspectRatio == CONF_ASPECT_4_3 ? "4:3" : "16:9"));
 
 	std::printf("Press HOME to exit.");
 
@@ -86,7 +70,7 @@ int main(int argc, char **argv)
 
 		if (uiPressed & WPAD_BUTTON_A)
 		{
-			*puyValue = *puyValue ? 0 : 1;
+			iAspectRatio = (iAspectRatio == CONF_ASPECT_4_3 ? CONF_ASPECT_16_9 : CONF_ASPECT_4_3);
 
 			VIDEO_ClearFrameBuffer(SpGXRmode, SpXfb, COLOR_BLACK);
 			std::printf("\x1b[2;0H");
@@ -99,7 +83,7 @@ int main(int argc, char **argv)
 				if (ISFS_Seek(iFileDescriptor, 0x4DF, 0) < 0)
 					throw std::ios_base::failure("Error seeking SYSCONF");
 
-				if (ISFS_Write(iFileDescriptor, puyValue, 1) < 0)
+				if (ISFS_Write(iFileDescriptor, reinterpret_cast<uint8_t*>(&iAspectRatio) + 3, 1) < 0)
 					throw std::ios_base::failure("Error writing to SYSCONF");
 			}
 			catch(const std::ios_base::failure& CiosBaseFailure)
@@ -111,7 +95,7 @@ int main(int argc, char **argv)
 			iFileDescriptor = -1;
 
 			std::printf("Press A to toggle aspect ratio. Current value: %s\n", 
-				*puyValue ? "16:9" : "4:3");
+				(iAspectRatio == CONF_ASPECT_4_3 ? "4:3" : "16:9"));
 			
 			std::printf("Press HOME to exit.");
 		}
