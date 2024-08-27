@@ -52,10 +52,13 @@ int main(int argc, char **argv)
 	std::printf("\x1b[2;0H");
 
 	int32_t iFileDescriptor = -1;
-	int32_t iAspectRatio = CONF_GetAspectRatio();
+	int32_t iNextAspectRatio __attribute__((aligned(0x20))) = CONF_GetAspectRatio();
+	int32_t iError = ISFS_OK;
+
+	iNextAspectRatio = (iNextAspectRatio == CONF_ASPECT_4_3 ? CONF_ASPECT_16_9 : CONF_ASPECT_4_3);
 
 	std::printf("Press A to toggle aspect ratio. Current value: %s\n", 
-		(iAspectRatio == CONF_ASPECT_4_3 ? "4:3" : "16:9"));
+		(iNextAspectRatio == CONF_ASPECT_4_3 ? "16:9" : "4:3"));
 
 	std::printf("Press HOME to exit.");
 
@@ -70,34 +73,45 @@ int main(int argc, char **argv)
 
 		if (uiPressed & WPAD_BUTTON_A)
 		{
-			iAspectRatio = (iAspectRatio == CONF_ASPECT_4_3 ? CONF_ASPECT_16_9 : CONF_ASPECT_4_3);
-
 			VIDEO_ClearFrameBuffer(SpGXRmode, SpXfb, COLOR_BLACK);
 			std::printf("\x1b[2;0H");
 
 			try
 			{
 				if ((iFileDescriptor = ISFS_Open("/shared2/sys/SYSCONF", ISFS_OPEN_WRITE)) < 0)
-					throw std::ios_base::failure("Error opening SYSCONF");
+					throw std::ios_base::failure(std::string{"Error opening SYSCONF, ret = "} + 
+						std::to_string(iFileDescriptor));
 
-				if (ISFS_Seek(iFileDescriptor, 0x4DF, 0) < 0)
-					throw std::ios_base::failure("Error seeking SYSCONF");
+				if ((iError = ISFS_Seek(iFileDescriptor, 0x4DF, 0)) < 0)
+					throw std::ios_base::failure(std::string{"Error seeking SYSCONF, ret = "} + 
+						std::to_string(iError));
 
-				if (ISFS_Write(iFileDescriptor, reinterpret_cast<uint8_t*>(&iAspectRatio) + 3, 1) < 0)
-					throw std::ios_base::failure("Error writing to SYSCONF");
+				if ((iError = ISFS_Write(iFileDescriptor, 
+					reinterpret_cast<uint8_t*>(&iNextAspectRatio) + 3, 1)) < 0)
+					throw std::ios_base::failure(std::string{"Error writing to SYSCONF, ret = "} + 
+						std::to_string(iError));
 			}
 			catch(const std::ios_base::failure& CiosBaseFailure)
 			{
-				std::printf("%s\n Perhaps try again?", CiosBaseFailure.what());
+				std::printf("%s. Perhaps try again?\n", CiosBaseFailure.what());
 			}
 			
-			if (iFileDescriptor >= 0) ISFS_Close(iFileDescriptor);
-			iFileDescriptor = -1;
+			if (iFileDescriptor >= 0) 
+			{
+				ISFS_Close(iFileDescriptor);
+				iFileDescriptor = -1;
+			}
 
+			if (iError >= 0) 
+				iNextAspectRatio = (iNextAspectRatio == CONF_ASPECT_4_3 ? 
+					CONF_ASPECT_16_9 : CONF_ASPECT_4_3);
+			
 			std::printf("Press A to toggle aspect ratio. Current value: %s\n", 
-				(iAspectRatio == CONF_ASPECT_4_3 ? "4:3" : "16:9"));
+				(iNextAspectRatio == CONF_ASPECT_4_3 ? "16:9" : "4:3"));
 			
 			std::printf("Press HOME to exit.");
+
+			
 		}
 
 		// We return to the launcher application via exit
