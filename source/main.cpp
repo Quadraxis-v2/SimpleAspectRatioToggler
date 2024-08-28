@@ -1,12 +1,19 @@
 #include <cstdlib>
-#include <cstdint>
 #include <ios>
+#include <cstring>
 
 #include <gccore.h>
 #include <wiiuse/wpad.h>
+#include <gctypes.h>
+#include <gcutil.h>
+#include <ogc/isfs.h>
 
 static void* SpXfb = 0;
 static GXRModeObj* SpGXRmode = 0;
+
+
+u16 FindItem(s32 iFileDescriptor);
+
 
 //---------------------------------------------------------------------------------
 int main(int argc, char **argv) 
@@ -19,7 +26,6 @@ int main(int argc, char **argv)
 	// This function initialises the attached controllers
 	WPAD_Init();
 
-	CONF_Init();
 	ISFS_Initialize();
 
 	// Obtain the preferred video mode from the system
@@ -51,14 +57,71 @@ int main(int argc, char **argv)
 
 	std::printf("\x1b[2;0H");
 
-	int32_t iFileDescriptor = -1;
-	int32_t iNextAspectRatio __attribute__((aligned(0x20))) = CONF_GetAspectRatio();
-	int32_t iError = ISFS_OK;
+	s32 iFileDescriptor{-1};
+	s32 iError{ISFS_OK};
+	u16 urOffset ATTRIBUTE_ALIGN(0x20) {};
+	char acItemName[6] ATTRIBUTE_ALIGN(0x20) {};
+	u8 uyNextAspectRatio ATTRIBUTE_ALIGN(0x20) {};
 
-	iNextAspectRatio = (iNextAspectRatio == CONF_ASPECT_4_3 ? CONF_ASPECT_16_9 : CONF_ASPECT_4_3);
+	try
+	{
+		if ((iFileDescriptor = ISFS_Open("/shared2/sys/SYSCONF", ISFS_OPEN_READ)) < 0)
+			throw std::ios_base::failure(std::string{"Error opening SYSCONF, ret = "} + 
+				std::to_string(iFileDescriptor));
+
+		// Seek lookup table item offset
+		if ((iError = ISFS_Seek(iFileDescriptor, -8, 2)) < 0)
+			throw std::ios_base::failure(std::string{"Error seeking SYSCONF, ret = "} + 
+				std::to_string(iError));
+
+		if ((iError = ISFS_Read(iFileDescriptor, &urOffset, 2)) < 0)
+			throw std::ios_base::failure(std::string{"Error reading lookup table, ret = "} + 
+				std::to_string(iError));
+
+		if (urOffset != 0)
+		{
+			// Seek real item offset
+			if ((iError = ISFS_Seek(iFileDescriptor, urOffset, 0)) < 0)
+				throw std::ios_base::failure(std::string{"Error seeking SYSCONF, ret = "} + 
+					std::to_string(iError));
+
+			if ((iError = ISFS_Read(iFileDescriptor, &urOffset, 2)) < 0)
+				throw std::ios_base::failure(std::string{"Error reading item offset, ret = "} + 
+					std::to_string(iError));
+
+			// Seek name of item
+			if ((iError = ISFS_Seek(iFileDescriptor, urOffset + 1, 0)) < 0)
+				throw std::ios_base::failure(std::string{"Error seeking SYSCONF, ret = "} + 
+					std::to_string(iError));
+
+			if ((iError = ISFS_Read(iFileDescriptor, &acItemName, 6)) < 0)
+				throw std::ios_base::failure(std::string{"Error reading item name, ret = "} + 
+					std::to_string(iError));
+
+			if (!strncmp(reinterpret_cast<char*>(&acItemName), "IPL.AR", 6)) urOffset += 7;
+			else urOffset = FindItem(iFileDescriptor);
+		}
+		else urOffset = FindItem(iFileDescriptor);
+
+		if ((iError = ISFS_Read(iFileDescriptor, &uyNextAspectRatio, 1)) < 0)
+			throw std::ios_base::failure(std::string{"Error reading item name, ret = "} + 
+				std::to_string(iError));
+	}
+	catch (const std::ios_base::failure& CiosBaseFailure)
+	{
+		std::printf("%s\n", CiosBaseFailure.what());
+	}
+
+	if (iFileDescriptor >= 0) 
+	{
+		ISFS_Close(iFileDescriptor);
+		iFileDescriptor = -1;
+	}
+
+	uyNextAspectRatio = (uyNextAspectRatio == CONF_ASPECT_4_3 ? CONF_ASPECT_16_9 : CONF_ASPECT_4_3);
 
 	std::printf("Press A to toggle aspect ratio. Current value: %s\n", 
-		(iNextAspectRatio == CONF_ASPECT_4_3 ? "16:9" : "4:3"));
+		(uyNextAspectRatio == CONF_ASPECT_4_3 ? "16:9" : "4:3"));
 
 	std::printf("Press HOME to exit.");
 
@@ -69,7 +132,7 @@ int main(int argc, char **argv)
 
 		// WPAD_ButtonsDown tells us which buttons were pressed in this loop
 		// this is a "one shot" state which will not fire again until the button has been released
-		uint32_t uiPressed = WPAD_ButtonsDown(0);
+		u32 uiPressed = WPAD_ButtonsDown(0);
 
 		if (uiPressed & WPAD_BUTTON_A)
 		{
@@ -82,16 +145,15 @@ int main(int argc, char **argv)
 					throw std::ios_base::failure(std::string{"Error opening SYSCONF, ret = "} + 
 						std::to_string(iFileDescriptor));
 
-				if ((iError = ISFS_Seek(iFileDescriptor, 0x4DF, 0)) < 0)
+				if ((iError = ISFS_Seek(iFileDescriptor, urOffset, 0)) < 0)
 					throw std::ios_base::failure(std::string{"Error seeking SYSCONF, ret = "} + 
 						std::to_string(iError));
 
-				if ((iError = ISFS_Write(iFileDescriptor, 
-					reinterpret_cast<uint8_t*>(&iNextAspectRatio) + 3, 1)) < 0)
+				if ((iError = ISFS_Write(iFileDescriptor, &uyNextAspectRatio, 1)) < 0)
 					throw std::ios_base::failure(std::string{"Error writing to SYSCONF, ret = "} + 
 						std::to_string(iError));
 			}
-			catch(const std::ios_base::failure& CiosBaseFailure)
+			catch (const std::ios_base::failure& CiosBaseFailure)
 			{
 				std::printf("%s. Perhaps try again?\n", CiosBaseFailure.what());
 			}
@@ -102,23 +164,20 @@ int main(int argc, char **argv)
 				iFileDescriptor = -1;
 			}
 
-			if (iError >= 0) 
-				iNextAspectRatio = (iNextAspectRatio == CONF_ASPECT_4_3 ? 
-					CONF_ASPECT_16_9 : CONF_ASPECT_4_3);
+			if (iError >= 0) uyNextAspectRatio = (uyNextAspectRatio == CONF_ASPECT_4_3 ? 
+				CONF_ASPECT_16_9 : CONF_ASPECT_4_3);
 			
 			std::printf("Press A to toggle aspect ratio. Current value: %s\n", 
-				(iNextAspectRatio == CONF_ASPECT_4_3 ? "16:9" : "4:3"));
+				(uyNextAspectRatio == CONF_ASPECT_4_3 ? "16:9" : "4:3"));
 			
 			std::printf("Press HOME to exit.");
-
-			
 		}
 
 		// We return to the launcher application via exit
 		if (uiPressed & WPAD_BUTTON_HOME) 
 		{
 			ISFS_Deinitialize();
-			exit(0);
+			std::exit(0);
 		}
 
 		// Wait for the next frame
@@ -126,4 +185,46 @@ int main(int argc, char **argv)
 	}
 
 	return 0;
+}
+
+
+u16 FindItem(s32 iFileDescriptor)
+{
+	// Search for item
+	u16 urItemCount ATTRIBUTE_ALIGN(0x20) {};
+	s32 iError{};
+
+	// Seek number of items
+	if ((iError = ISFS_Seek(iFileDescriptor, 4, 0)) < 0)
+		throw std::ios_base::failure(std::string{"Error seeking SYSCONF, ret = "} + 
+			std::to_string(iError));
+
+	if ((iError = ISFS_Read(iFileDescriptor, &urItemCount, 2)) < 0)
+		throw std::ios_base::failure(std::string{"Error reading number of items, ret = "} + 
+			std::to_string(iError));
+
+	u16 aurItemOffsets[urItemCount] ATTRIBUTE_ALIGN(0x20) {};
+
+	// Read all item offsets
+	if ((iError = ISFS_Read(iFileDescriptor, &aurItemOffsets, urItemCount << 1)) < 0)
+		throw std::ios_base::failure(std::string{"Error reading number of items, ret = "} + 
+			std::to_string(iError));
+
+	// Check all offsets
+	char acItemName[6] ATTRIBUTE_ALIGN(0x20) {};
+
+	for (s32 i = 0; i < urItemCount; ++i)
+	{
+		if ((iError = ISFS_Seek(iFileDescriptor, aurItemOffsets[i] + 1, 0)) < 0)
+			throw std::ios_base::failure(std::string{"Error seeking SYSCONF, ret = "} + 
+				std::to_string(iError));
+
+		if ((iError = ISFS_Read(iFileDescriptor, &acItemName, 6)) < 0)
+			throw std::ios_base::failure(std::string{"Error reading item name, ret = "} + 
+				std::to_string(iError));
+
+		if (!strncmp(reinterpret_cast<char*>(&acItemName), "IPL.AR", 6)) return aurItemOffsets[i] + 7;
+	}
+
+	throw std::ios_base::failure("Item not found");
 }
