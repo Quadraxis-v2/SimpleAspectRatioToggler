@@ -187,6 +187,7 @@ int main(int argc, char **argv)
 		VIDEO_WaitVSync();
 	}
 
+	ISFS_Deinitialize();
 	return 0;
 }
 
