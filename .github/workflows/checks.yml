@@ -46,7 +46,7 @@ jobs:
                 </platform>" > cppcheckFolder/wii.xml
       
       - name: Run static checks
-        run: cppcheck source/ --cppcheck-build-dir=cppcheckFolder --enable=all --disable=unusedFunction,missingInclude -D__wii__ --error-exitcode=1 --platform=cppcheckFolder/wii.xml --verbose 
+        run: cppcheck source/ --cppcheck-build-dir=cppcheckFolder -D__wii__ --enable=warning,style,performance,portability,information --error-exitcode=1 --platform=cppcheckFolder/wii.xml --verbose 
 
       - name: Build
         run: make build
