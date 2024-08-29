@@ -14,11 +14,11 @@ jobs:
           sudo apt-get install -y cppcheck
           
       - name: Checkout code
-        uses: actions/checkout@v4.1.7
+        uses: actions/checkout@v3
         
       - name: Cache Cppcheck build folder
         id: cache-build
-        uses: actions/cache@v4.0.2
+        uses: actions/cache@v3.0.11
         with:
           path: cppcheckFolder
           key: checks
@@ -27,7 +27,7 @@ jobs:
         if: ${{ steps.cache-build.outputs.cache-hit != 'true' }}  # Only if the cache is not found
         run: |
           mkdir cppcheckFolder
-          echo "<?xml version="1"?>
+          echo "<?xml version=\"1\"?>
                 <platform>
                   <char_bit>8</char_bit>
                   <default-sign>unsigned</default-sign>
@@ -43,10 +43,10 @@ jobs:
                     <size_t>4</size_t>
                     <wchar_t>4</wchar_t>
                   </sizeof>
-                </platform>" > cppcheckFolder/wii
+                </platform>" > cppcheckFolder/wii.xml
       
       - name: Run static checks
-        run: cppcheck source/ --enable=warning,style,performance,portability,information --verbose -D__wii__ --platform=cppcheckFolder/wii --cppcheck-build-dir=cppcheckFolder --error-exitcode=1
+        run: cppcheck source/ --check-level=exhaustive --cppcheck-build-dir=cppcheckFolder --enable=all --disable=unusedFunction,missingInclude -D__wii__ --error-exitcode=1 --platform=cppcheckFolder/wii.xml --verbose 
 
       - name: Build
         run: make build
