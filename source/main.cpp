@@ -9,11 +9,13 @@
 #include <ogc/isfs.h>
 #include <malloc.h>
 #include <ogc/conf.h>
+#include <gcbool.h>
 
-static void* SpXfb = 0;
-static GXRModeObj* SpGXRmode = 0;
+static void* SpXfb{nullptr};	
+static GXRModeObj* SpGXRmode{nullptr};
 
 
+void Initialise() noexcept;
 u16 LoadOffsets(s32 iFileDescriptor, u16** paurItemOffsets);
 u16 FindItem(s32 iFileDescriptor, u16* paurItemOffsets, u16 urItemCount, const std::string& CsItemName);
 
@@ -22,49 +24,15 @@ u16 FindItem(s32 iFileDescriptor, u16* paurItemOffsets, u16 urItemCount, const s
 int main(int argc, char **argv) 
 {
 //---------------------------------------------------------------------------------
-
-	// Initialise the video system
-	VIDEO_Init();
-
-	// This function initialises the attached controllers
-	WPAD_Init();
-
-	ISFS_Initialize();
-
-	// Obtain the preferred video mode from the system
-	// This will correspond to the settings in the Wii menu
-	SpGXRmode = VIDEO_GetPreferredMode(NULL);
-
-	// Allocate memory for the display in the uncached region
-	SpXfb = MEM_K0_TO_K1(SYS_AllocateFramebuffer(SpGXRmode));
-
-	// Initialise the console, required for printf
-	console_init(SpXfb, 20, 20, SpGXRmode->fbWidth, SpGXRmode->xfbHeight, 
-		SpGXRmode->fbWidth * VI_DISPLAY_PIX_SZ);
-
-	// Set up the video registers with the chosen mode
-	VIDEO_Configure(SpGXRmode);
-
-	// Tell the video hardware where our display memory is
-	VIDEO_SetNextFramebuffer(SpXfb);
-
-	// Make the display visible
-	VIDEO_SetBlack(false);
-
-	// Flush the video register changes to the hardware
-	VIDEO_Flush();
-
-	// Wait for Video setup to complete
-	VIDEO_WaitVSync();
-	if (SpGXRmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync();
-
-	std::printf("\x1b[2;0H");
+	Initialise();
 
 	s32 iFileDescriptor{-1};
 	s32 iError{ISFS_OK};
 	u16 urOffset ATTRIBUTE_ALIGN(32) {};
 	char acItemName[6] ATTRIBUTE_ALIGN(32) {};
 	u8 uyAspectRatio ATTRIBUTE_ALIGN(32) {};
+
+	std::printf("\x1b[2;0H");
 
 	try
 	{
@@ -135,7 +103,7 @@ int main(int argc, char **argv)
 	}
 	catch (const std::ios_base::failure& CiosBaseFailure)
 	{
-		std::printf("%s\nPress A to try again.\nPress HOME to exit", CiosBaseFailure.what());
+		std::printf("%s\nPress A to try again.\nPress HOME to exit\n", CiosBaseFailure.what());
 	}
 
 	if (iFileDescriptor >= 0) ISFS_Close(iFileDescriptor);
@@ -156,6 +124,8 @@ int main(int argc, char **argv)
 
 			try
 			{
+				std::printf("Opening system configuration...\n");
+
 				if ((iFileDescriptor = ISFS_Open("/shared2/sys/SYSCONF", ISFS_OPEN_WRITE)) < 0)
 					throw std::ios_base::failure(std::string{"Error opening SYSCONF, ret = "} + 
 						std::to_string(iFileDescriptor));
@@ -167,6 +137,8 @@ int main(int argc, char **argv)
 				if ((iError = ISFS_Write(iFileDescriptor, &uyAspectRatio, 1)) < 0)
 					throw std::ios_base::failure(std::string{"Error writing to SYSCONF, ret = "} + 
 						std::to_string(iError));
+
+				std::printf("Success! Exiting...\n");
 			}
 			catch (const std::ios_base::failure& CiosBaseFailure)
 			{
@@ -179,8 +151,9 @@ int main(int argc, char **argv)
 		// We return to the launcher application via exit
 		if (uiPressed & WPAD_BUTTON_HOME) 
 		{
+			std::printf("Exiting...");
 			ISFS_Deinitialize();
-			std::exit(0);
+			std::exit(EXIT_SUCCESS);
 		}
 
 		// Wait for the next frame
@@ -189,6 +162,45 @@ int main(int argc, char **argv)
 
 	ISFS_Deinitialize();
 	return 0;
+}
+
+
+void Initialise() noexcept
+{
+	// Initialise the video system
+	VIDEO_Init();
+
+	// This function initialises the attached controllers
+	WPAD_Init();
+
+	// Initialise filesystem
+	ISFS_Initialize();
+
+	// Obtain the preferred video mode from the system
+	// This will correspond to the settings in the Wii menu
+	SpGXRmode = VIDEO_GetPreferredMode(nullptr);
+
+	// Allocate memory for the display in the uncached region
+	SpXfb = MEM_K0_TO_K1(SYS_AllocateFramebuffer(SpGXRmode));
+
+	console_init(SpXfb, 20, 20, SpGXRmode->fbWidth, SpGXRmode->xfbHeight, 
+		SpGXRmode->fbWidth * VI_DISPLAY_PIX_SZ);
+
+	// Set up the video registers with the chosen mode
+	VIDEO_Configure(SpGXRmode);
+
+	// Tell the video hardware where our display memory is
+	VIDEO_SetNextFramebuffer(SpXfb);
+
+	// Make the display visible
+	VIDEO_SetBlack(FALSE);
+
+	// Flush the video register changes to the hardware
+	VIDEO_Flush();
+
+	// Wait for Video setup to complete
+	VIDEO_WaitVSync();
+	if(SpGXRmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync();
 }
 
 
