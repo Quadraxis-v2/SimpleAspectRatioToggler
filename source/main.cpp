@@ -34,6 +34,7 @@ int main(int argc, char **argv)
 
 	std::printf("\x1b[2;0H");
 
+	// Attempt primary method
 	try
 	{
 		if ((iFileDescriptor = ISFS_Open("/shared2/sys/SYSCONF", ISFS_OPEN_RW)) < 0)
@@ -70,45 +71,53 @@ int main(int argc, char **argv)
 					std::to_string(iError));
 
 			if (!strncmp(reinterpret_cast<char*>(&acItemName), "IPL.AR", 6)) urOffset += 7;
-			else 
+			else throw std::ios_base::failure("Item not found");
+		}
+		else throw std::ios_base::failure("Lookup table not found");
+	}
+	catch (const std::ios_base::failure& CiosBaseFailure)
+	{
+		try
+		{
+			if (iFileDescriptor >= 0)	// Attempt secondary method in case of error
 			{
 				u16* paurItemOffsets{nullptr};
 				u16 urItemCount{LoadOffsets(iFileDescriptor, &paurItemOffsets)};
 				urOffset = FindItem(iFileDescriptor, paurItemOffsets, urItemCount, "IPL.AR");
 				delete[] paurItemOffsets;
 			}
+			else throw;
 		}
-		else
-		{
-			u16* paurItemOffsets{nullptr};
-			u16 urItemCount{LoadOffsets(iFileDescriptor, &paurItemOffsets)};
-			urOffset = FindItem(iFileDescriptor, paurItemOffsets, urItemCount, "IPL.AR");
-			delete[] paurItemOffsets;
-		}
-
-		if ((iError = ISFS_Read(iFileDescriptor, &uyAspectRatio, 1)) < 0)
-			throw std::ios_base::failure(std::string{"Error reading item name, ret = "} + 
-				std::to_string(iError));
-
-		uyAspectRatio = (uyAspectRatio == CONF_ASPECT_4_3 ? CONF_ASPECT_16_9 : CONF_ASPECT_4_3);
-
-		// Toggle value
-		if ((iError = ISFS_Seek(iFileDescriptor, -1, 1)) < 0)
-			throw std::ios_base::failure(std::string{"Error seeking SYSCONF, ret = "} + 
-				std::to_string(iError));
-
-		if ((iError = ISFS_Write(iFileDescriptor, &uyAspectRatio, 1)) < 0)
-			throw std::ios_base::failure(std::string{"Error writing to SYSCONF, ret = "} + 
-				std::to_string(iError));
+		catch (const std::ios_base::failure& CiosBaseFailure)
+		{ std::printf("%s\nPress HOME to exit and try again.\n", CiosBaseFailure.what()); }
 	}
-	catch (const std::ios_base::failure& CiosBaseFailure)
+
+	if (iFileDescriptor >= 0 && iError >= 0)	// All went well
 	{
-		std::printf("%s\nPress A to try again.\nPress HOME to exit\n", CiosBaseFailure.what());
+		try
+		{
+			if ((iError = ISFS_Read(iFileDescriptor, &uyAspectRatio, 1)) < 0)
+				throw std::ios_base::failure(std::string{"Error reading item name, ret = "} + 
+					std::to_string(iError));
+
+			uyAspectRatio = (uyAspectRatio == CONF_ASPECT_4_3 ? CONF_ASPECT_16_9 : CONF_ASPECT_4_3);
+
+			// Toggle value
+			if ((iError = ISFS_Seek(iFileDescriptor, -1, 1)) < 0)
+				throw std::ios_base::failure(std::string{"Error seeking SYSCONF, ret = "} + 
+					std::to_string(iError));
+
+			if ((iError = ISFS_Write(iFileDescriptor, &uyAspectRatio, 1)) < 0)
+				throw std::ios_base::failure(std::string{"Error writing to SYSCONF, ret = "} + 
+					std::to_string(iError));
+		}
+		catch (const std::ios_base::failure& CiosBaseFailure)
+		{ std::printf("%s\nPress HOME to exit and try again.\n", CiosBaseFailure.what()); }
 	}
 
 	if (iFileDescriptor >= 0) ISFS_Close(iFileDescriptor);
 
-	while(iError < 0) // Give option to retry
+	while(iError < 0 || iFileDescriptor < 0)
 	{
 		// Call WPAD_ScanPads each loop, this reads the latest controller states
 		WPAD_ScanPads();
@@ -117,41 +126,9 @@ int main(int argc, char **argv)
 		// this is a "one shot" state which will not fire again until the button has been released
 		u32 uiPressed = WPAD_ButtonsDown(0);
 
-		if (uiPressed & WPAD_BUTTON_A)
-		{
-			VIDEO_ClearFrameBuffer(SpGXRmode, SpXfb, COLOR_BLACK);
-			std::printf("\x1b[2;0H");
-
-			try
-			{
-				std::printf("Opening system configuration...\n");
-
-				if ((iFileDescriptor = ISFS_Open("/shared2/sys/SYSCONF", ISFS_OPEN_WRITE)) < 0)
-					throw std::ios_base::failure(std::string{"Error opening SYSCONF, ret = "} + 
-						std::to_string(iFileDescriptor));
-
-				if ((iError = ISFS_Seek(iFileDescriptor, urOffset, 0)) < 0)
-					throw std::ios_base::failure(std::string{"Error seeking SYSCONF, ret = "} + 
-						std::to_string(iError));
-
-				if ((iError = ISFS_Write(iFileDescriptor, &uyAspectRatio, 1)) < 0)
-					throw std::ios_base::failure(std::string{"Error writing to SYSCONF, ret = "} + 
-						std::to_string(iError));
-
-				std::printf("Success! Exiting...\n");
-			}
-			catch (const std::ios_base::failure& CiosBaseFailure)
-			{
-				std::printf("%s\nPress A to try again.\nPress HOME to exit", CiosBaseFailure.what());
-			}
-			
-			if (iFileDescriptor >= 0) ISFS_Close(iFileDescriptor);
-		}
-
 		// We return to the launcher application via exit
 		if (uiPressed & WPAD_BUTTON_HOME) 
 		{
-			std::printf("Exiting...");
 			ISFS_Deinitialize();
 			std::exit(EXIT_SUCCESS);
 		}
@@ -160,7 +137,6 @@ int main(int argc, char **argv)
 		VIDEO_WaitVSync();
 	}
 
-	ISFS_Deinitialize();
 	return 0;
 }
 
