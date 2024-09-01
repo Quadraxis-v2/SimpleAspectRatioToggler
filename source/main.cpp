@@ -17,7 +17,8 @@ static GXRModeObj* SpGXRmode{nullptr};
 
 void Initialise() noexcept;
 u16 LoadOffsets(s32 iFileDescriptor, u16** paurItemOffsets);
-u16 FindItem(s32 iFileDescriptor, u16* paurItemOffsets, u16 urItemCount, const std::string& CsItemName);
+u16 FindItem(s32 iFileDescriptor, const u16* CpaurItemOffsets, u16 urItemCount, 
+	const std::string& CsItemName);
 
 
 //---------------------------------------------------------------------------------
@@ -88,8 +89,8 @@ int main(int argc, char **argv)
 			}
 			else throw;
 		}
-		catch (const std::ios_base::failure& CiosBaseFailure)
-		{ std::printf("%s\nPress HOME to exit and try again.\n", CiosBaseFailure.what()); }
+		catch (const std::ios_base::failure& CiosBaseFailureSecondary)
+		{ std::printf("%s\nPress HOME to exit and try again.\n", CiosBaseFailureSecondary.what()); }
 	}
 
 	if (iFileDescriptor >= 0 && iError >= 0)	// All went well
@@ -206,7 +207,8 @@ u16 LoadOffsets(s32 iFileDescriptor, u16** paurItemOffsets)
 }
 
 
-u16 FindItem(s32 iFileDescriptor, u16* paurItemOffsets, u16 urItemCount, const std::string& CsItemName)
+u16 FindItem(s32 iFileDescriptor, const u16* CpaurItemOffsets, u16 urItemCount, 
+	const std::string& CsItemName)
 {
 	s32 iError{};
 	char acItemName[CsItemName.length()] ATTRIBUTE_ALIGN(32) {};
@@ -214,7 +216,7 @@ u16 FindItem(s32 iFileDescriptor, u16* paurItemOffsets, u16 urItemCount, const s
 	// Check all offsets
 	for (s32 i = 0; i < urItemCount; ++i)
 	{
-		if ((iError = ISFS_Seek(iFileDescriptor, paurItemOffsets[i] + 1, 0)) < 0)
+		if ((iError = ISFS_Seek(iFileDescriptor, CpaurItemOffsets[i] + 1, 0)) < 0)
 			throw std::ios_base::failure(std::string{"Error seeking SYSCONF, ret = "} + 
 				std::to_string(iError));
 
@@ -223,7 +225,7 @@ u16 FindItem(s32 iFileDescriptor, u16* paurItemOffsets, u16 urItemCount, const s
 				std::to_string(iError));
 
 		if (!strncmp(reinterpret_cast<char*>(&acItemName), CsItemName.c_str(), CsItemName.length())) 
-			return paurItemOffsets[i] + 7;
+			return CpaurItemOffsets[i] + 7;
 	}
 
 	throw std::ios_base::failure("Item not found");
