@@ -86,6 +86,7 @@ int main(int argc, char **argv)
 				u16 urItemCount{LoadOffsets(iFileDescriptor, &paurItemOffsets)};
 				urOffset = FindItem(iFileDescriptor, paurItemOffsets, urItemCount, "IPL.AR");
 				delete[] paurItemOffsets;
+				iError = ISFS_OK;
 			}
 			else throw;
 		}
